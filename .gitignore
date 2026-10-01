@@ -1,0 +1,11 @@
+node_modules/
+.wrangler/
+dist/
+config.json
+/deploy.secrets.json
+/wrangler.jsonc
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+*.log

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#fafafa">
+  <meta name="description" content="Service availability, health checks and incident history.">
+  <title>Status</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles/main.css">
+  <script type="module" src="/scripts/app.js"></script>
+</head>
+<body>
+  <div id="initial-loading" class="initial-loading" aria-busy="true">
+    <div id="loading-spinner" class="loading-spinner" role="status" aria-label="Loading status"></div>
+    <p id="initial-error" role="alert" hidden>Unable to load status. Please try again.</p>
+    <button id="initial-retry" type="button" hidden>Try again</button>
+    <noscript><p>JavaScript is required to display live status. <a href="/api/status">Read the status JSON</a>.</p></noscript>
+  </div>
+  <div class="page" hidden>
+    <a class="skip-link" href="#components">Skip to services</a>
+    <header class="site-header">
+      <a class="wordmark" href="/" aria-label="Worker Status home"><span class="brand-mark" aria-hidden="true">▥</span> <span data-brand-title>Worker Status</span></a>
+      <a href="#history">Incident history <span aria-hidden="true">↗</span></a>
+    </header>
+    <main>
+      <section class="overview" aria-labelledby="overview-title">
+        <div class="status-heading"><span id="overall-dot" class="status-dot unknown" aria-hidden="true"></span><h1 id="overview-title"></h1></div>
+        <p id="overview-description"></p>
+        <div class="update-line"><span id="updated" role="status">Waiting for first update</span><button id="refresh" type="button">Refresh <span aria-hidden="true">↻</span></button></div>
+        <p id="connection-error" role="alert" hidden></p>
+      </section>
+      <section id="active-section" aria-labelledby="active-title" hidden>
+        <div class="section-heading"><h2 id="active-title">Current incidents</h2><span id="active-count"></span></div>
+        <div id="active-incidents"></div>
+      </section>
+      <section id="components" aria-labelledby="components-title">
+        <div class="section-heading"><h2 id="components-title">Service health</h2><span id="time-range">Awaiting data</span></div>
+        <div class="legend" aria-label="Status legend"><span><i class="operational"></i>Operational</span><span><i class="reported"></i>Reported issues</span><span><i class="elevated"></i>Elevated issues</span><span><i class="unknown"></i>No data</span></div>
+        <div id="service-groups"><p class="empty">Service health will appear here once connected.</p></div>
+        <p class="chart-help">Hover, focus or tap a tick for details. Uptime reflects successful checks or time without active incidents, depending on the monitoring method.</p>
+      </section>
+      <section id="history" aria-labelledby="history-title">
+        <div class="section-heading"><h2 id="history-title">Incident history</h2><span id="history-range"></span></div>
+        <div id="history-items"><p class="empty">Waiting for incident history.</p></div>
+        <button id="load-more" type="button" hidden>Load earlier incidents</button>
+      </section>
+    </main>
+    <footer><span data-brand-title>Worker Status</span><span>Checks at the edge. Updates every minute.</span><a href="/api/status">Status JSON</a></footer>
+  </div>
+  <div id="tick-tooltip" class="tooltip" role="tooltip" hidden></div>
+</body>
+</html>

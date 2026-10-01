@@ -1,0 +1,18 @@
+{
+  "name": "worker-status",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --test-scheduled",
+    "deploy": "bun scripts/deploy.js",
+    "db:local": "wrangler d1 migrations apply worker-status --local",
+    "db:remote": "wrangler d1 migrations apply worker-status --remote",
+    "check": "bun test && wrangler deploy --dry-run",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "jsonc-parser": "^3.3.1",
+    "wrangler": "^4.137.0"
+  }
+}

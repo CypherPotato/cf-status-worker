@@ -1,0 +1,48 @@
+{
+  "branding": {
+    "title": "Worker Status",
+    "backgroundColor": "#fafbf9",
+    "foregroundColor": "#25332e",
+    "highlightColor": "#21876c",
+    "successColor": "#21876c",
+    "warnColor": "#a75a08",
+    "dangerColor": "#bb3b32"
+  },
+  "visualization": {
+    "tickFrequency": "1day",
+    "maxTimeSpan": "30day",
+    "clearIssuesAfter": "30min",
+    "elevatedAfter": 5
+  },
+  "groups": [
+    {
+      "name": "api",
+      "label": "Global API",
+      "description": "AIVAX Management, operating and observability"
+    }
+  ],
+  "components": [
+    {
+      "label": {
+        "name": "service-uptime",
+        "title": "Service uptime",
+        "description": "API and panel management",
+        "group": "api"
+      },
+      "ping": {
+        "url": "https://example.com/health-check",
+        "interval": "15min",
+        "timeout": "10sec",
+        "headers": { "Authorization": "replace-with-private-credential" }
+      }
+    },
+    {
+      "label": {
+        "name": "user-management",
+        "title": "User management",
+        "description": "Authentication and account services",
+        "group": "api"
+      }
+    }
+  ]
+}
