@@ -6,7 +6,12 @@
     "highlightColor": "#21876c",
     "successColor": "#21876c",
     "warnColor": "#a75a08",
-    "dangerColor": "#bb3b32"
+    "dangerColor": "#bb3b32",
+    "dark": {
+      "backgroundColor": "#121715",
+      "foregroundColor": "#dfe7e3",
+      "highlightColor": "#4cc3a1"
+    }
   },
   "visualization": {
     "tickFrequency": "1day",

@@ -24,15 +24,32 @@ export function parseConfig(raw) {
       }
       branding.title = config.branding.title;
     }
-    for (const field of ['backgroundColor', 'foregroundColor', 'highlightColor', 'successColor', 'warnColor', 'dangerColor']) {
-      const value = field === 'successColor' ? config.branding.successColor ?? config.branding.succcessColor : config.branding[field];
-      if (value !== undefined) {
-        if (typeof value !== 'string' || !/^#(?:[a-f0-9]{3}|[a-f0-9]{6})$/i.test(value)) {
-          throw new ConfigValidationError(`branding.${field}: expected a #RGB or #RRGGBB color.`);
+    const dark = config.branding.dark;
+    if (dark !== undefined && (!dark || typeof dark !== 'object' || Array.isArray(dark))) {
+      throw new ConfigValidationError('branding.dark: expected an object with dark theme colors.');
+    }
+    if (dark) branding.dark = {};
+    for (const [source, target, path] of [[config.branding, branding, 'branding'], [dark, branding.dark, 'branding.dark']]) {
+      if (!source) continue;
+      for (const field of ['backgroundColor', 'foregroundColor', 'highlightColor', 'successColor', 'warnColor', 'dangerColor']) {
+        const value = field === 'successColor' ? source.successColor ?? source.succcessColor : source[field];
+        if (value !== undefined) {
+          if (typeof value !== 'string' || !/^#(?:[a-f0-9]{3}|[a-f0-9]{6})$/i.test(value)) {
+            throw new ConfigValidationError(`${path}.${field}: expected a #RGB or #RRGGBB color.`);
+          }
+          target[field] = value;
         }
-        branding[field] = value;
       }
     }
+  }
+  let telegram = null;
+  if (config.telegram !== undefined) {
+    if (!config.telegram || typeof config.telegram !== 'object' || Array.isArray(config.telegram)) {
+      throw new ConfigValidationError('telegram: expected an object with botToken.');
+    }
+    const match = typeof config.telegram.botToken === 'string' && /^(\d{1,15}):[\w-]{30,}$/.exec(config.telegram.botToken);
+    if (!match) throw new ConfigValidationError('telegram.botToken: expected the token issued by @BotFather (for example, "123456789:AA...").');
+    telegram = { botId: Number(match[1]), token: config.telegram.botToken };
   }
   const visualization = config.visualization;
   if (!visualization || typeof visualization !== 'object' || Array.isArray(visualization)) {
@@ -132,5 +149,5 @@ export function parseConfig(raw) {
       ping: monitor
     };
   });
-  return { tickMs, spanMs, clearMs, elevatedAfter, branding, groups, components };
+  return { tickMs, spanMs, clearMs, elevatedAfter, branding, groups, components, telegram };
 }

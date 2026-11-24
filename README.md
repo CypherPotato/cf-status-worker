@@ -30,7 +30,8 @@ A self-hosted status page that runs entirely on Cloudflare Workers, D1 and stati
 - **Incident ingestion**: authenticated `POST /api/incidents` endpoint for services to report issues by class.
 - **Severity levels**: reported issues turn orange; elevated report counts or failed checks turn red.
 - **Grouped services**: optional groups with labels and descriptions.
-- **Custom branding**: title and colors configurable without rebuilding.
+- **Custom branding**: title and colors configurable without rebuilding, with a light and dark theme.
+- **Telegram notifications**: optional bot that notifies subscribers when incidents start and resolve.
 - **Incident history**: paginated history of report episodes and ping outages.
 - **Rolling retention**: data older than the configured window is removed automatically.
 - **No frontend build**: vanilla HTML, CSS and JavaScript with no external browser dependencies.
@@ -193,7 +194,18 @@ Optional array of `{ "name", "label", "description" }`. Match `name` to each com
 | `highlightColor` | Brand mark, link hover and focus outlines. |
 | `successColor`, `warnColor`, `dangerColor` | Ticks, indicators and incident text. |
 
-Colors accept `#RGB` or `#RRGGBB`. The misspelled `succcessColor` is accepted as an alias; `successColor` takes precedence. Omitted fields keep the default styling, and removing `branding` restores defaults on refresh. Custom colors are applied as configured, so choose values with adequate contrast. The bundled favicon is not changed.
+| `dark` | Optional object with the same color fields, applied in the dark theme. |
+
+The page follows the system color scheme until the visitor uses the header toggle, which is remembered in the browser. Colors accept `#RGB` or `#RRGGBB`. The misspelled `succcessColor` is accepted as an alias; `successColor` takes precedence. Omitted fields keep the default styling, and removing `branding` restores defaults on refresh. Custom colors are applied as configured, so choose values with adequate contrast. The bundled favicon is not changed.
+
+### `telegram`
+
+Optional. Create a bot with [@BotFather](https://t.me/BotFather) and set `telegram.botToken`. The token is private and never returned by the public API.
+
+- Once the cron has run, the header shows a **Notify me on Telegram** link to the bot.
+- Users subscribe with `/start` and unsubscribe with `/stop`; the bot can also be added to groups.
+- Each cron run reads bot updates and sends one message when an incident starts and one when it resolves. Chats that block the bot are removed.
+- Commands are read with `getUpdates`, so do not configure a webhook for this bot or use the same token in another polling client.
 
 ### Limits
 
@@ -240,7 +252,7 @@ Ingestion does not allow cross-origin browser requests. The key grants access to
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /api/status` | Current status, ticks and statistics for every component. |
+| `GET /api/status` | Current status, ticks and statistics for every component, plus daily (UTC) p50/p95/p99 latency of successful health checks across all components. |
 | `GET /api/history?offset=0` | Incident history in pages of 50. `offset` must be a non-negative integer up to 1,000,000. |
 
 Responses are never cached. Only the page assets and these endpoints are served; any other path, including configuration files, returns `404`.
@@ -314,13 +326,14 @@ Deployment tests mock Wrangler to check step ordering, first setup, key preserva
 ## 📁 Project structure
 
 ```text
-├── migrations/            D1 schema (checks, reports, monitor_state)
+├── migrations/            D1 schema (checks, reports, monitor_state, telegram_*)
 ├── public/                Static status page (HTML, CSS, JS, favicon)
 ├── scripts/deploy.js      Deployment script
 ├── src/
 │   ├── worker.js          HTTP routes and cron handler
 │   ├── config.js          Configuration parsing and validation
-│   └── status.js          Status aggregation, history and retention
+│   ├── status.js          Status aggregation, history and retention
+│   └── telegram.js        Telegram subscriptions and notifications
 ├── tests/                 Offline worker and deployment tests
 ├── config.json.example    Sample status configuration
 └── wrangler.jsonc.example Sample Wrangler configuration

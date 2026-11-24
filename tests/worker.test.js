@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { parseConfig } from '../src/config.js';
 import { purge, readStatus } from '../src/status.js';
 import worker from '../src/worker.js';
@@ -8,7 +8,8 @@ import worker from '../src/worker.js';
 class D1 {
   constructor() {
     this.sqlite = new Database(':memory:');
-    this.sqlite.exec(readFileSync(new URL('../migrations/0001_initial.sql', import.meta.url), 'utf8'));
+    const migrations = new URL('../migrations/', import.meta.url);
+    for (const file of readdirSync(migrations).sort()) this.sqlite.exec(readFileSync(new URL(file, migrations), 'utf8'));
   }
   prepare(sql) {
     const query = this.sqlite.prepare(sql);
@@ -131,6 +132,17 @@ describe('status aggregation', () => {
     expect(result.components[1].uptime).toBe(100);
     expect(result.components[1].latencyMs).toBeNull();
     expect(result.components[1].ticks.every(tick => tick.status === 'operational')).toBe(true);
+  });
+
+  test('daily latency percentiles use successful checks only', async () => {
+    const db = database();
+    const day = Math.floor(now / 86400000) * 86400000;
+    for (let index = 1; index <= 100; index++) {
+      db.sqlite.prepare('INSERT INTO checks VALUES (?, ?, ?, ?, ?)').run('api', day + index, 1, index * 10, 200);
+    }
+    db.sqlite.prepare('INSERT INTO checks VALUES (?, ?, ?, ?, ?)').run('api', day + 101, 0, 99999, 503);
+    const result = await readStatus(db, config, now);
+    expect(result.latency).toEqual([{ day, checks: 100, p50: 500, p95: 950, p99: 990 }]);
   });
 
   test('report-only degrades with reports, unions overlapping classes and recovers after quiet time', async () => {
@@ -312,6 +324,63 @@ describe('worker HTTP', () => {
     expect(text).not.toContain('private-header');
     expect(text).not.toContain('private.example');
     expect(response.headers.get('Cache-Control')).toBe('no-store');
+  });
+});
+
+describe('telegram', () => {
+  const token = '123456:test-only-token-not-a-real-secret-0000';
+  const telegramRaw = JSON.stringify({ ...JSON.parse(raw), telegram: { botToken: token } });
+
+  function mockTelegram(updates = []) {
+    const sent = [];
+    globalThis.fetch = async (url, options) => {
+      if (!String(url).startsWith('https://api.telegram.org/')) return new Response('OK');
+      const method = String(url).split('/').at(-1);
+      const body = JSON.parse(options.body);
+      if (method === 'getMe') return Response.json({ ok: true, result: { username: 'status_bot' } });
+      if (method === 'getUpdates') return Response.json({ ok: true, result: updates.splice(0).filter(update => update.update_id >= body.offset) });
+      sent.push(body);
+      return Response.json({ ok: true, result: {} });
+    };
+    return sent;
+  }
+
+  test('validates the bot token and keeps it private', async () => {
+    expect(parseConfig(telegramRaw).telegram.botId).toBe(123456);
+    for (const telegram of [null, {}, { botToken: 'invalid' }]) {
+      expect(() => parseConfig(JSON.stringify({ ...JSON.parse(raw), telegram }))).toThrow();
+    }
+    const db = database();
+    mockTelegram();
+    const env = { DB: db, STATUS_CONFIG: telegramRaw, INGEST_API_KEY: key };
+    await worker.scheduled({}, env);
+    const text = await (await worker.fetch(new Request('https://status.example/api/status'), env)).text();
+    expect(text).not.toContain(token);
+    expect(JSON.parse(text).telegram).toEqual({ url: 'https://t.me/status_bot' });
+  });
+
+  test('subscribes chats and notifies once when incidents start and resolve', async () => {
+    const db = database();
+    const env = { DB: db, STATUS_CONFIG: telegramRaw, INGEST_API_KEY: key };
+    const sent = mockTelegram([{ update_id: 7, message: { text: '/start', chat: { id: 42 } } }]);
+    await worker.scheduled({}, env);
+    expect(sent.map(message => message.chat_id)).toEqual([42]);
+    sent.length = 0;
+
+    expect((await worker.fetch(request({ name: 'reports-only', class: 'Login' }), env)).status).toBe(202);
+    db.sqlite.exec('UPDATE telegram_bots SET claimed_at = 0');
+    await Promise.all([worker.scheduled({}, env), worker.scheduled({}, env)]);
+    const opened = sent.filter(message => message.text.includes('Reported issues with Login'));
+    expect(opened).toHaveLength(1);
+    expect(opened[0].chat_id).toBe(42);
+
+    sent.length = 0;
+    db.sqlite.exec(`UPDATE reports SET reported_at = reported_at - ${config.clearMs + 1000}`);
+    db.sqlite.exec(`UPDATE telegram_incidents SET started_at = started_at - ${config.clearMs + 1000}, last_at = last_at - ${config.clearMs + 1000}`);
+    await worker.scheduled({}, env);
+    await worker.scheduled({}, env);
+    expect(sent.filter(message => message.text.includes('Resolved: Login'))).toHaveLength(1);
+    expect(db.sqlite.query('SELECT COUNT(*) AS total FROM telegram_incidents').get().total).toBe(0);
   });
 });
 

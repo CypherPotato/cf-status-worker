@@ -1,5 +1,6 @@
 import { parseConfig } from './config.js';
 import { purge, readStatus } from './status.js';
+import { notifyTelegram, pollTelegram } from './telegram.js';
 
 export default {
   async fetch(request, env) {
@@ -131,6 +132,15 @@ export default {
           VALUES (?, ?, ?, ?, ?)`)
           .bind(label.name, started, ok ? 1 : 0, Date.now() - started, statusCode).run();
       }));
+    }
+
+    if (config.telegram) {
+      try {
+        await pollTelegram(env.DB, config, now);
+      } catch (error) {
+        console.error(`Telegram polling failed: ${error.message}`);
+      }
+      await notifyTelegram(env.DB, config, Date.now());
     }
   }
 };

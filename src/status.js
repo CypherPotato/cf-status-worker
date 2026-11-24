@@ -49,7 +49,7 @@ export async function readStatus(db, config, now, historyOffset = 0, historyOnly
   if (historyOnly) return historyPage;
 
   const start = Math.floor(cutoff / config.tickMs) * config.tickMs;
-  const [checkTicks, reportTicks, latestChecks, activeIncidents, reportDurations] = await db.batch([
+  const [checkTicks, reportTicks, latestChecks, activeIncidents, reportDurations, latencyDays, telegramBot] = await db.batch([
     db.prepare(`SELECT component, CAST(checked_at / ? AS INTEGER) * ? AS bucket,
       COUNT(*) AS total, SUM(ok) AS successful, AVG(latency_ms) AS latency_ms
       FROM checks WHERE checked_at >= ? GROUP BY component, bucket`)
@@ -73,8 +73,20 @@ export async function readStatus(db, config, now, historyOffset = 0, historyOnly
         PARTITION BY component ORDER BY reported_at, id
       ) AS next_at FROM reports WHERE reported_at >= ?1 AND reported_at <= ?2
     ) SELECT component, SUM(MAX(0, MIN(COALESCE(next_at, ?2), reported_at + ?3, ?2) - reported_at)) AS affected_ms
-      FROM intervals GROUP BY component`).bind(cutoff, now, config.clearMs)
+      FROM intervals GROUP BY component`).bind(cutoff, now, config.clearMs),
+    db.prepare(`WITH ranked AS (
+      SELECT CAST(checked_at / 86400000 AS INTEGER) * 86400000 AS day, latency_ms,
+        ROW_NUMBER() OVER (PARTITION BY CAST(checked_at / 86400000 AS INTEGER) ORDER BY latency_ms) AS position,
+        COUNT(*) OVER (PARTITION BY CAST(checked_at / 86400000 AS INTEGER)) AS total
+      FROM checks WHERE checked_at >= ? AND ok = 1 AND ${filter}
+    ) SELECT day, total AS checks,
+      MIN(CASE WHEN position >= total * 0.50 THEN latency_ms END) AS p50,
+      MIN(CASE WHEN position >= total * 0.95 THEN latency_ms END) AS p95,
+      MIN(CASE WHEN position >= total * 0.99 THEN latency_ms END) AS p99
+      FROM ranked GROUP BY day ORDER BY day`).bind(cutoff, ...names),
+    ...(config.telegram ? [db.prepare('SELECT username FROM telegram_bots WHERE bot_id = ?').bind(config.telegram.botId)] : [])
   ]);
+  const telegramUsername = telegramBot?.results[0]?.username;
 
   const active = activeIncidents.results.filter(incident => incident.source === 'report' ||
     config.components.some(component => component.label.name === incident.component && component.ping)).map(incident => ({
@@ -120,6 +132,8 @@ export async function readStatus(db, config, now, historyOffset = 0, historyOnly
   return {
     generatedAt: now, windowStart: cutoff, tickMs: config.tickMs, spanMs: config.spanMs,
     clearMs: config.clearMs, elevatedAfter: config.elevatedAfter,
-    branding: config.branding, groups: config.groups, components, active, history: historyPage
+    branding: config.branding, groups: config.groups, components, active, history: historyPage,
+    latency: latencyDays.results,
+    telegram: telegramUsername ? { url: `https://t.me/${telegramUsername}` } : null
   };
 }
